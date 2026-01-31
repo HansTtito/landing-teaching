@@ -1,106 +1,147 @@
-# ProfeChile - Landing Page
+# ProfeChile MVP
 
-Landing page para una plataforma de clases particulares en Chile, donde profesores pueden publicar su perfil y ofrecer clases a estudiantes de primaria y secundaria.
+MVP de plataforma de clases particulares en Chile. Los profesores publican su perfil y los apoderados los contactan por WhatsApp.
 
-## Características
+## Tech Stack
 
-- **Diseño moderno y responsive**: Se adapta a todos los dispositivos (desktop, tablet, móvil)
-- **Secciones completas**:
-  - Hero con buscador de profesores
-  - Cómo funciona (3 pasos)
-  - Materias disponibles (Matemáticas, Lenguaje, Ciencias, etc.)
-  - Profesores destacados
-  - Sección para profesores (registro)
-  - Testimonios de usuarios
-  - Precios transparentes
-  - Preguntas frecuentes (FAQ)
-  - Footer con links y redes sociales
+- **Framework**: Next.js 14 (App Router)
+- **Styling**: Tailwind CSS
+- **Auth & DB**: Supabase (preparado para integrar)
+- **Icons**: Lucide React
+- **Language**: TypeScript
 
-## Tecnologías
+## Características del MVP
 
-- HTML5
-- CSS3 (Variables CSS, Flexbox, Grid, Animaciones)
-- JavaScript (ES6+)
-- Font Awesome (iconos)
-- Google Fonts (Inter)
+- ✅ Landing page atractiva
+- ✅ Búsqueda de profesores con filtros
+- ✅ Perfiles de profesores
+- ✅ Contacto directo por WhatsApp
+- ✅ Registro de profesores (formulario multi-step)
+- ✅ Registro de apoderados
+- ✅ 100% responsive
+- ⏳ Autenticación con Supabase (preparado)
+- ⏳ Base de datos real (usando mock data por ahora)
 
-## Estructura de Archivos
+## Instalación
 
-```
-landing-teacher/
-├── index.html      # Página principal
-├── styles.css      # Estilos CSS
-├── script.js       # JavaScript para interactividad
-└── README.md       # Este archivo
-```
+```bash
+# 1. Ir a la carpeta del MVP
+cd mvp
 
-## Cómo Usar
+# 2. Instalar dependencias
+npm install
 
-1. **Abrir localmente**: Simplemente abre `index.html` en tu navegador
+# 3. Copiar variables de entorno
+cp .env.local.example .env.local
 
-2. **Con servidor local** (recomendado):
-   ```bash
-   # Con Python
-   python -m http.server 8000
-   
-   # Con Node.js (npx)
-   npx serve
-   
-   # Con Live Server de VS Code
-   # Click derecho en index.html > "Open with Live Server"
-   ```
-
-3. Visita `http://localhost:8000` (o el puerto que uses)
-
-## Funcionalidades JavaScript
-
-- **Navbar con scroll**: Cambia de transparente a sólido al hacer scroll
-- **Menú móvil**: Toggle para navegación en dispositivos pequeños
-- **FAQ Acordeón**: Preguntas que se expanden/contraen
-- **Smooth scroll**: Navegación suave a las secciones
-- **Animaciones al scroll**: Elementos aparecen con animación al entrar en viewport
-- **Contador animado**: Los números del hero se animan
-- **Parallax sutil**: Tarjetas flotantes siguen el mouse
-- **Toast notifications**: Sistema de notificaciones
-
-## Personalización
-
-### Colores
-Edita las variables CSS en `styles.css`:
-
-```css
-:root {
-    --primary: #4F46E5;       /* Color principal (morado/índigo) */
-    --secondary: #10B981;     /* Color secundario (verde) */
-    --accent: #F59E0B;        /* Color de acento (amarillo/naranja) */
-    /* ... más colores */
-}
+# 4. Ejecutar en desarrollo
+npm run dev
 ```
 
-### Contenido
-- Modifica el texto directamente en `index.html`
-- Cambia las imágenes por URLs propias (actualmente usa Unsplash)
-- Ajusta los precios de ejemplo según el mercado
+Abre [http://localhost:3000](http://localhost:3000)
 
-### Logos de universidades
-Actualmente son texto plano. Para agregar logos reales:
-1. Reemplaza los divs `.trust-logo` por imágenes
-2. Ajusta los estilos en `.trust-logos`
+## Configurar Supabase (opcional)
 
-## Próximos Pasos (Sugerencias)
+1. Crea una cuenta gratis en [supabase.com](https://supabase.com)
+2. Crea un nuevo proyecto
+3. Ve a Settings > API y copia las credenciales
+4. Pega las credenciales en `.env.local`:
 
-Para convertir esta landing en una plataforma funcional:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+```
 
-1. **Backend**: Implementar con Node.js, Django, Laravel, etc.
-2. **Base de datos**: PostgreSQL o MongoDB para usuarios y clases
-3. **Autenticación**: Sistema de login para profesores y apoderados
-4. **Pagos**: Integrar Webpay, Mercado Pago o Stripe
-5. **Videollamadas**: Integrar Zoom API o Jitsi
-6. **Panel de administración**: Dashboard para gestionar la plataforma
+5. Ejecuta el SQL de la tabla profesores en el SQL Editor de Supabase:
 
-## Licencia
+```sql
+-- Tabla de profesores
+CREATE TABLE profesores (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  nombre TEXT NOT NULL,
+  apellido TEXT NOT NULL,
+  email TEXT NOT NULL,
+  telefono TEXT NOT NULL,
+  foto_url TEXT,
+  titulo TEXT NOT NULL,
+  universidad TEXT NOT NULL,
+  descripcion TEXT NOT NULL,
+  experiencia_anos INTEGER NOT NULL,
+  materias TEXT[] NOT NULL,
+  niveles TEXT[] NOT NULL,
+  modalidad TEXT[] NOT NULL,
+  precio_hora INTEGER NOT NULL,
+  region TEXT NOT NULL,
+  comuna TEXT NOT NULL,
+  rating DECIMAL(2,1) DEFAULT 5.0,
+  total_resenas INTEGER DEFAULT 0,
+  verificado BOOLEAN DEFAULT false,
+  activo BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-Este proyecto está disponible para uso personal y comercial.
+-- Habilitar RLS
+ALTER TABLE profesores ENABLE ROW LEVEL SECURITY;
+
+-- Política: cualquiera puede ver profesores activos
+CREATE POLICY "Profesores públicos" ON profesores
+  FOR SELECT USING (activo = true);
+
+-- Política: profesores pueden editar su propio perfil
+CREATE POLICY "Profesores editan su perfil" ON profesores
+  FOR UPDATE USING (auth.uid() = user_id);
+```
+
+## Deploy en Vercel (Gratis)
+
+1. Sube el código a GitHub
+2. Ve a [vercel.com](https://vercel.com) y conecta tu repo
+3. Agrega las variables de entorno de Supabase
+4. ¡Listo! Vercel despliega automáticamente
+
+```bash
+# O usa el CLI de Vercel
+npx vercel
+```
+
+## Estructura del Proyecto
+
+```
+mvp/
+├── src/
+│   ├── app/                    # Páginas (App Router)
+│   │   ├── page.tsx           # Home
+│   │   ├── profesores/        # Lista de profesores
+│   │   ├── profesor/[id]/     # Perfil de profesor
+│   │   ├── login/             # Login
+│   │   ├── registro/          # Registro apoderados
+│   │   └── registro-profesor/ # Registro profesores
+│   ├── components/            # Componentes reutilizables
+│   ├── lib/                   # Utilidades y config
+│   │   ├── supabase.ts       # Cliente Supabase
+│   │   └── mockData.ts       # Datos de prueba
+│   └── types/                 # TypeScript types
+├── public/                    # Assets estáticos
+└── package.json
+```
+
+## Próximos Pasos
+
+1. **Conectar Supabase real** - Reemplazar mock data
+2. **Subir fotos** - Usar Supabase Storage
+3. **Sistema de reseñas** - Que apoderados puedan calificar
+4. **Panel de profesor** - Para editar su perfil
+5. **Pagos** - Integrar Flow.cl o Webpay (cuando sea necesario)
+
+## Scripts
+
+```bash
+npm run dev      # Desarrollo
+npm run build    # Build producción
+npm run start    # Iniciar producción
+npm run lint     # Verificar código
+```
 
 ---
 

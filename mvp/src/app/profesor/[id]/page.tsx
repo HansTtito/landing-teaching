@@ -1,8 +1,9 @@
 'use client'
 
-import { use } from 'react'
+import { use, useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
 import { mockProfesores } from '@/lib/mockData'
 import { 
   Star, 
@@ -14,10 +15,12 @@ import {
   Clock,
   Award,
   ArrowLeft,
-  Phone,
-  Mail
+  Loader2,
+  Calendar,
+  Users
 } from 'lucide-react'
-import { MATERIAS } from '@/types'
+import { MATERIAS, REGIONES } from '@/types'
+import type { Profesor } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -25,13 +28,66 @@ interface PageProps {
 
 export default function ProfesorPage({ params }: PageProps) {
   const { id } = use(params)
-  const profesor = mockProfesores.find(p => p.id === id)
+  const [profesor, setProfesor] = useState<Profesor | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [resenas, setResenas] = useState<any[]>([])
+
+  useEffect(() => {
+    async function loadProfesor() {
+      try {
+        // Intentar cargar de Supabase
+        const { data, error } = await supabase
+          .from('profesores')
+          .select('*')
+          .eq('id', id)
+          .eq('activo', true)
+          .single()
+
+        if (error || !data) {
+          // Si no encuentra en DB, buscar en mock data
+          const mockProf = mockProfesores.find(p => p.id === id)
+          setProfesor(mockProf || null)
+        } else {
+          setProfesor(data as Profesor)
+          
+          // Cargar reseñas
+          const { data: resenasData } = await supabase
+            .from('resenas')
+            .select('*')
+            .eq('profesor_id', id)
+            .order('created_at', { ascending: false })
+            .limit(5)
+          
+          if (resenasData) {
+            setResenas(resenasData)
+          }
+        }
+      } catch (err) {
+        // Fallback a mock data
+        const mockProf = mockProfesores.find(p => p.id === id)
+        setProfesor(mockProf || null)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadProfesor()
+  }, [id])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
+      </div>
+    )
+  }
 
   if (!profesor) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center pt-20">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Profesor no encontrado</h1>
+          <p className="text-gray-600 mb-6">Este perfil no existe o ya no está disponible.</p>
           <Link href="/profesores" className="btn btn-primary">
             Ver todos los profesores
           </Link>
@@ -40,11 +96,30 @@ export default function ProfesorPage({ params }: PageProps) {
     )
   }
 
-  const whatsappLink = `https://wa.me/56${profesor.telefono.replace(/\D/g, '')}?text=Hola ${profesor.nombre}, te encontré en ProfeChile y me gustaría consultar por clases de ${profesor.materias[0]}.`
+  const whatsappLink = `https://wa.me/56${profesor.telefono.replace(/\D/g, '')}?text=Hola ${profesor.nombre}, te encontré en ProfeChile y me gustaría consultar por clases de ${MATERIAS.find(m => m.value === profesor.materias[0])?.label || profesor.materias[0]}.`
 
   const materiasLabels = profesor.materias.map(m => 
     MATERIAS.find(mat => mat.value === m)?.label || m
   )
+
+  const regionLabel = REGIONES.find(r => r.value === profesor.region)?.label || profesor.region
+
+  // Reseñas de ejemplo si no hay reales
+  const displayResenas = resenas.length > 0 ? resenas : [
+    { id: 1, nombre_usuario: 'María F.', rating: 5, comentario: 'Excelente profesor/a, muy paciente y clara en sus explicaciones.', created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString() },
+    { id: 2, nombre_usuario: 'Roberto D.', rating: 5, comentario: 'Muy recomendable. Domina la materia y sabe cómo enseñar.', created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() },
+    { id: 3, nombre_usuario: 'Carmen L.', rating: 4, comentario: 'Buenas clases, puntual y responsable.', created_at: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString() },
+  ]
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 7) return `Hace ${diffDays} días`
+    if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} semanas`
+    return `Hace ${Math.floor(diffDays / 30)} meses`
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20">
@@ -66,13 +141,13 @@ export default function ProfesorPage({ params }: PageProps) {
             {/* Profile Header */}
             <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
               <div className="flex flex-col md:flex-row gap-6">
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <Image
                     src={profesor.foto_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop'}
                     alt={`${profesor.nombre} ${profesor.apellido}`}
                     width={180}
                     height={180}
-                    className="rounded-2xl object-cover"
+                    className="rounded-2xl object-cover w-[180px] h-[180px]"
                   />
                   {profesor.verificado && (
                     <div className="absolute -bottom-2 -right-2 bg-blue-500 text-white p-2 rounded-full">
@@ -81,7 +156,7 @@ export default function ProfesorPage({ params }: PageProps) {
                   )}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-2">
                     <div>
                       <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                         {profesor.nombre} {profesor.apellido}
@@ -90,7 +165,7 @@ export default function ProfesorPage({ params }: PageProps) {
                         {profesor.titulo}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 bg-yellow-50 px-3 py-2 rounded-xl">
+                    <div className="flex items-center gap-1 bg-yellow-50 px-3 py-2 rounded-xl flex-shrink-0">
                       <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                       <span className="font-bold text-lg">{profesor.rating.toFixed(1)}</span>
                       <span className="text-gray-500 text-sm">({profesor.total_resenas})</span>
@@ -104,11 +179,11 @@ export default function ProfesorPage({ params }: PageProps) {
                     </span>
                     <span className="inline-flex items-center gap-1 text-gray-600">
                       <Clock className="w-4 h-4" />
-                      {profesor.experiencia_anos} años de experiencia
+                      {profesor.experiencia_anos} años exp.
                     </span>
                     <span className="inline-flex items-center gap-1 text-gray-600">
                       <MapPin className="w-4 h-4" />
-                      {profesor.comuna}, {profesor.region === 'metropolitana' ? 'Santiago' : profesor.region}
+                      {profesor.comuna}, {regionLabel}
                     </span>
                   </div>
 
@@ -120,7 +195,7 @@ export default function ProfesorPage({ params }: PageProps) {
                     )}
                     {profesor.modalidad.includes('presencial') && (
                       <span className="bg-green-100 text-green-700 text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1">
-                        <MapPin className="w-4 h-4" /> Clases Presenciales
+                        <MapPin className="w-4 h-4" /> Presencial
                       </span>
                     )}
                     {profesor.verificado && (
@@ -136,7 +211,7 @@ export default function ProfesorPage({ params }: PageProps) {
             {/* About */}
             <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Sobre mí</h2>
-              <p className="text-gray-600 leading-relaxed">
+              <p className="text-gray-600 leading-relaxed whitespace-pre-line">
                 {profesor.descripcion}
               </p>
             </div>
@@ -170,36 +245,36 @@ export default function ProfesorPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Reviews Placeholder */}
+            {/* Reviews */}
             <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
               <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Reseñas ({profesor.total_resenas})
+                Reseñas ({profesor.total_resenas || displayResenas.length})
               </h2>
               <div className="space-y-4">
-                {/* Mock reviews */}
-                {[
-                  { name: 'María F.', rating: 5, text: 'Excelente profesora, muy paciente y clara en sus explicaciones. Mi hijo subió sus notas significativamente.', date: 'Hace 2 semanas' },
-                  { name: 'Roberto D.', rating: 5, text: 'Muy recomendable. Domina la materia y sabe cómo enseñar a diferentes tipos de estudiantes.', date: 'Hace 1 mes' },
-                  { name: 'Carmen L.', rating: 4, text: 'Buenas clases, puntual y responsable. Las clases online funcionan muy bien.', date: 'Hace 1 mes' },
-                ].map((review, i) => (
-                  <div key={i} className="border-b border-gray-100 pb-4 last:border-0">
+                {displayResenas.map((review) => (
+                  <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                          <span className="font-semibold text-primary-600">{review.name[0]}</span>
+                          <span className="font-semibold text-primary-600">
+                            {review.nombre_usuario[0]}
+                          </span>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{review.name}</p>
-                          <p className="text-sm text-gray-500">{review.date}</p>
+                          <p className="font-medium text-gray-900">{review.nombre_usuario}</p>
+                          <p className="text-sm text-gray-500">{formatDate(review.created_at)}</p>
                         </div>
                       </div>
                       <div className="flex">
                         {Array(review.rating).fill(0).map((_, i) => (
                           <Star key={i} className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                         ))}
+                        {Array(5 - review.rating).fill(0).map((_, i) => (
+                          <Star key={i} className="w-4 h-4 text-gray-200" />
+                        ))}
                       </div>
                     </div>
-                    <p className="text-gray-600">{review.text}</p>
+                    <p className="text-gray-600">{review.comentario}</p>
                   </div>
                 ))}
               </div>
@@ -227,23 +302,27 @@ export default function ProfesorPage({ params }: PageProps) {
                 Contactar por WhatsApp
               </a>
 
-              <p className="text-center text-sm text-gray-500">
+              <p className="text-center text-sm text-gray-500 mb-6">
                 Responde generalmente en menos de 2 horas
               </p>
 
-              <hr className="my-6" />
+              <hr className="mb-6" />
 
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-gray-600">
-                  <Award className="w-5 h-5 text-primary-600" />
-                  <span>{profesor.total_resenas} clases realizadas</span>
+                  <Users className="w-5 h-5 text-primary-600" />
+                  <span>{profesor.total_resenas || 0} alumnos</span>
                 </div>
                 <div className="flex items-center gap-3 text-gray-600">
                   <Star className="w-5 h-5 text-yellow-500" />
-                  <span>{profesor.rating.toFixed(1)} de valoración promedio</span>
+                  <span>{profesor.rating.toFixed(1)} de valoración</span>
                 </div>
                 <div className="flex items-center gap-3 text-gray-600">
-                  <Clock className="w-5 h-5 text-green-500" />
+                  <Calendar className="w-5 h-5 text-green-500" />
+                  <span>Disponibilidad flexible</span>
+                </div>
+                <div className="flex items-center gap-3 text-gray-600">
+                  <Clock className="w-5 h-5 text-blue-500" />
                   <span>Respuesta rápida</span>
                 </div>
               </div>

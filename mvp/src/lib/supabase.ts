@@ -5,6 +5,18 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Helper para obtener usuario actual
+export async function getCurrentUser() {
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
+}
+
+// Helper para obtener sesión
+export async function getSession() {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session
+}
+
 // Tipos para la base de datos
 export type Database = {
   public: {
@@ -37,18 +49,18 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['profesores']['Row'], 'id' | 'created_at' | 'rating' | 'total_resenas'>
         Update: Partial<Database['public']['Tables']['profesores']['Insert']>
       }
-      resenas: {
+      perfiles: {
         Row: {
           id: string
-          profesor_id: string
-          usuario_id: string
-          nombre_usuario: string
-          rating: number
-          comentario: string
+          user_id: string
+          nombre: string
+          apellido: string
+          telefono: string
+          tipo: 'apoderado' | 'profesor'
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['resenas']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['resenas']['Insert']>
+        Insert: Omit<Database['public']['Tables']['perfiles']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['perfiles']['Insert']>
       }
     }
   }

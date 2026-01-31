@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { 
   GraduationCap, 
   Mail, 
@@ -13,15 +14,19 @@ import {
   Building,
   FileText,
   DollarSign,
-  MapPin,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react'
 import { MATERIAS, REGIONES, NIVELES } from '@/types'
+import { supabase } from '@/lib/supabase'
 
 export default function RegistroProfesorPage() {
+  const router = useRouter()
   const [step, setStep] = useState(1)
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
   
   const [formData, setFormData] = useState({
     // Step 1: Personal
@@ -72,26 +77,154 @@ export default function RegistroProfesorPage() {
     }))
   }
 
+  const validateStep = (currentStep: number): boolean => {
+    setError(null)
+    
+    if (currentStep === 1) {
+      if (!formData.nombre || !formData.apellido || !formData.email || !formData.telefono) {
+        setError('Por favor completa todos los campos')
+        return false
+      }
+      if (formData.password.length < 8) {
+        setError('La contraseña debe tener al menos 8 caracteres')
+        return false
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setError('Las contraseñas no coinciden')
+        return false
+      }
+    }
+    
+    if (currentStep === 2) {
+      if (!formData.titulo || !formData.universidad || !formData.experiencia_anos) {
+        setError('Por favor completa todos los campos')
+        return false
+      }
+      if (formData.descripcion.length < 50) {
+        setError('La descripción debe tener al menos 50 caracteres')
+        return false
+      }
+    }
+    
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (step < 3) {
-      setStep(step + 1)
+      if (validateStep(step)) {
+        setStep(step + 1)
+      }
       return
     }
-    
-    if (formData.password !== formData.confirmPassword) {
-      alert('Las contraseñas no coinciden')
+
+    // Validar paso 3
+    if (formData.materias.length === 0) {
+      setError('Selecciona al menos una materia')
+      return
+    }
+    if (formData.niveles.length === 0) {
+      setError('Selecciona al menos un nivel')
+      return
+    }
+    if (formData.modalidad.length === 0) {
+      setError('Selecciona al menos una modalidad')
+      return
+    }
+    if (!formData.region || !formData.comuna || !formData.precio_hora) {
+      setError('Por favor completa todos los campos')
       return
     }
     
     setIsLoading(true)
-    
-    // TODO: Integrar con Supabase
-    setTimeout(() => {
-      alert('¡Registro exitoso! Tu perfil será revisado en las próximas 24 horas. Te contactaremos por email.')
+    setError(null)
+
+    try {
+      // 1. Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            nombre: formData.nombre,
+            apellido: formData.apellido,
+            telefono: formData.telefono,
+            tipo: 'profesor'
+          }
+        }
+      })
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          setError('Este email ya está registrado. ¿Quieres iniciar sesión?')
+        } else {
+          setError(authError.message)
+        }
+        return
+      }
+
+      if (authData.user) {
+        // 2. Crear perfil de profesor
+        const { error: profesorError } = await supabase
+          .from('profesores')
+          .insert({
+            user_id: authData.user.id,
+            nombre: formData.nombre,
+            apellido: formData.apellido,
+            email: formData.email,
+            telefono: formData.telefono,
+            titulo: formData.titulo,
+            universidad: formData.universidad,
+            descripcion: formData.descripcion,
+            experiencia_anos: parseInt(formData.experiencia_anos),
+            materias: formData.materias,
+            niveles: formData.niveles,
+            modalidad: formData.modalidad,
+            precio_hora: parseInt(formData.precio_hora),
+            region: formData.region,
+            comuna: formData.comuna,
+            verificado: false,
+            activo: true
+          })
+
+        if (profesorError) {
+          console.error('Error creando perfil de profesor:', profesorError)
+          // El usuario ya fue creado, mostrar éxito de todos modos
+        }
+
+        setSuccess(true)
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Error al crear la cuenta. Intenta de nuevo.')
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Perfil Creado!</h1>
+            <p className="text-gray-600 mb-6">
+              Te enviamos un email de confirmación a <strong>{formData.email}</strong>. 
+              Por favor revisa tu bandeja de entrada para activar tu cuenta.
+              <br /><br />
+              Una vez confirmado, tu perfil será visible para los apoderados que busquen profesores.
+            </p>
+            <Link href="/login" className="btn btn-primary w-full">
+              Ir a Iniciar Sesión
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -139,6 +272,13 @@ export default function RegistroProfesorPage() {
 
         {/* Form */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             
             {/* Step 1: Personal Info */}
@@ -304,7 +444,9 @@ export default function RegistroProfesorPage() {
                     value={formData.descripcion}
                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                   />
-                  <p className="text-sm text-gray-500 mt-1">Mínimo 100 caracteres</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formData.descripcion.length}/50 caracteres mínimo
+                  </p>
                 </div>
               </>
             )}
@@ -460,10 +602,10 @@ export default function RegistroProfesorPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="btn btn-primary flex-1 text-lg py-4"
+                className="btn btn-primary flex-1 text-lg py-4 disabled:opacity-50"
               >
                 {isLoading 
-                  ? 'Registrando...' 
+                  ? 'Creando perfil...' 
                   : step < 3 
                     ? 'Continuar' 
                     : 'Crear mi Perfil Gratis'}

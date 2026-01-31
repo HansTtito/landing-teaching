@@ -2,11 +2,16 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { GraduationCap, Mail, Lock, Eye, EyeOff, User, Phone } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { GraduationCap, Mail, Lock, Eye, EyeOff, User, Phone, AlertCircle, CheckCircle } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function RegistroPage() {
+  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -20,30 +25,88 @@ export default function RegistroPage() {
     e.preventDefault()
     
     if (formData.password !== formData.confirmPassword) {
-      alert('Las contraseñas no coinciden')
+      setError('Las contraseñas no coinciden')
+      return
+    }
+
+    if (formData.password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres')
       return
     }
     
     setIsLoading(true)
-    
-    // TODO: Integrar con Supabase Auth
-    // const { data, error } = await supabase.auth.signUp({
-    //   email: formData.email,
-    //   password: formData.password,
-    //   options: {
-    //     data: {
-    //       nombre: formData.nombre,
-    //       apellido: formData.apellido,
-    //       telefono: formData.telefono,
-    //       tipo: 'apoderado'
-    //     }
-    //   }
-    // })
-    
-    setTimeout(() => {
-      alert('¡Registro exitoso! Funcionalidad completa próximamente. Por ahora, explora los profesores disponibles.')
+    setError(null)
+
+    try {
+      // 1. Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            nombre: formData.nombre,
+            apellido: formData.apellido,
+            telefono: formData.telefono,
+            tipo: 'apoderado'
+          }
+        }
+      })
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          setError('Este email ya está registrado. ¿Quieres iniciar sesión?')
+        } else {
+          setError(authError.message)
+        }
+        return
+      }
+
+      if (authData.user) {
+        // 2. Crear perfil en tabla perfiles
+        const { error: profileError } = await supabase
+          .from('perfiles')
+          .insert({
+            user_id: authData.user.id,
+            nombre: formData.nombre,
+            apellido: formData.apellido,
+            telefono: formData.telefono,
+            tipo: 'apoderado'
+          })
+
+        if (profileError) {
+          console.error('Error creando perfil:', profileError)
+          // No es crítico, el usuario ya está creado
+        }
+
+        setSuccess(true)
+      }
+    } catch (err) {
+      setError('Error al crear la cuenta. Intenta de nuevo.')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Cuenta Creada!</h1>
+            <p className="text-gray-600 mb-6">
+              Te enviamos un email de confirmación a <strong>{formData.email}</strong>. 
+              Por favor revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.
+            </p>
+            <Link href="/login" className="btn btn-primary w-full">
+              Ir a Iniciar Sesión
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -66,6 +129,13 @@ export default function RegistroPage() {
 
         {/* Form */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Nombre y Apellido */}
             <div className="grid grid-cols-2 gap-4">
@@ -188,7 +258,7 @@ export default function RegistroPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="btn btn-primary w-full text-lg py-4"
+              className="btn btn-primary w-full text-lg py-4 disabled:opacity-50"
             >
               {isLoading ? 'Creando cuenta...' : 'Crear Cuenta Gratis'}
             </button>
